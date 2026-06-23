@@ -32,13 +32,10 @@ ADMIN_IDS = [8610336203, 8928323846]
 OWNER_ID = 8610336203
 SUPPORT_IDS = [8610336203]
 
-# API URL'leri (Birden fazla API desteği)
-API_URLS = [
-    "https://yartyccfurry.onrender.com",
-    "https://yartyccfurry.onrender.com",  # Yedek
-]
+# 🔥 KANAL AYARI - BURAYI DEĞİŞTİR!
+CHANNEL_USERNAME = "@A_ToolsX"  # <--- Senin kanalın
 
-CHANNEL_USERNAME = "@yartyccfurry"
+API_URL = "https://yartyccfurry.onrender.com"
 DAILY_LIMIT = 5
 PREMIUM_LIMIT = 100
 
@@ -264,7 +261,6 @@ class SuperAPIClient:
         return proxies
     
     def setup_session(self):
-        # Retry mekanizması
         retry_strategy = Retry(
             total=5,
             backoff_factor=2,
@@ -279,7 +275,6 @@ class SuperAPIClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
-        # Headers
         self.session.headers.update({
             "User-Agent": random.choice([
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
@@ -311,7 +306,7 @@ class SuperAPIClient:
     
     def make_request(self, endpoint, data=None, method="GET"):
         max_attempts = 5
-        api_urls = API_URLS.copy()
+        api_urls = [API_URL]
         
         for api_attempt in range(len(api_urls)):
             url = f"{api_urls[api_attempt]}{endpoint}"
@@ -331,7 +326,6 @@ class SuperAPIClient:
                         time.sleep(5)
                         continue
                     elif response.status_code in [403, 401]:
-                        # Proxy banlanmış, yeni proxy dene
                         self.proxy_index += 1
                         continue
                     else:
@@ -351,16 +345,13 @@ class SuperAPIClient:
                     time.sleep(2)
                     continue
             
-            # Bu API başarısız, diğerine geç
             logger.warning(f"API {api_urls[api_attempt]} başarısız, diğerine geçiliyor...")
             time.sleep(2)
         
-        # Tüm API'ler başarısız
         return None
     
     def test_api(self):
-        """API'nin çalışıp çalışmadığını test et"""
-        for url in API_URLS:
+        for url in [API_URL]:
             try:
                 response = self.session.get(f"{url}/api/stats", timeout=10)
                 if response.status_code == 200:
@@ -377,13 +368,10 @@ class SuperCardBot:
         self.app = None
         self.running = True
         
-        # Bot zaten çalışıyorsa eski instance'ı durdur
         self.stop_old_instance()
     
     def stop_old_instance(self):
-        """Eğer bot zaten çalışıyorsa durdur"""
         try:
-            # Webhook'u temizle
             temp_app = Application.builder().token(BOT_TOKEN).build()
             import asyncio
             asyncio.run(temp_app.bot.delete_webhook())
@@ -430,7 +418,6 @@ class SuperCardBot:
         user_data = self.db.get_user(user_id)
         is_premium = user_data[5] == 1 if user_data else False
         
-        # API test et
         api_status = "✅ Calisiyor" if self.api.test_api() else "❌ Calismiyor"
         
         welcome_text = f"""
@@ -439,6 +426,7 @@ class SuperCardBot:
 Merhaba {user.first_name}! 
 
 📊 Istatistikler:
+• Kanal: {CHANNEL_USERNAME}
 • Kalan Hak: {remaining}
 • Premium: {'✅ Evet' if is_premium else '❌ Hayir'}
 • Toplam Kontrol: {user_data[10] if user_data else 0}
@@ -541,7 +529,6 @@ Merhaba {user.first_name}!
                 )
             else:
                 await status_msg.edit_text("❌ Kart uretilirken hata olustu! API'ye baglanilamiyor.")
-                # API test et
                 if not self.api.test_api():
                     await update.message.reply_text("⚠️ API calismiyor! Lütfen daha sonra tekrar dene.")
                 
@@ -910,7 +897,6 @@ Merhaba {user.first_name}!
         self.db.cursor.execute('SELECT COUNT(*), SUM(CASE WHEN status="approved" THEN 1 ELSE 0 END) FROM card_results')
         total_checks, live_checks = self.db.cursor.fetchone()
         
-        # API durumu
         api_status = "✅ Calisiyor" if self.api.test_api() else "❌ Calismiyor"
         
         message = f"""
@@ -1350,7 +1336,6 @@ Her referans icin 1 ekstra hak kazan!
             await update.message.reply_text("❌ Aktif islem bulunamadi!")
     
     def run(self):
-        # Önce webhook'u temizle
         try:
             import asyncio
             temp_app = Application.builder().token(BOT_TOKEN).build()
@@ -1389,7 +1374,6 @@ Her referans icin 1 ekstra hak kazan!
         print(f"📡 API Durumu: {'✅ Calisiyor' if self.api.test_api() else '❌ Calismiyor'}")
         print("✅ Bot calisiyor!")
         
-        # Polling ile başlat - conflict hatasını önlemek için drop_pending_updates=True
         self.app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
