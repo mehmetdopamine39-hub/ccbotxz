@@ -23,6 +23,8 @@ from telegram.ext import (
 import urllib3
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+import socket
+import socks
 
 # ============= KONFIGÜRASYON =============
 BOT_TOKEN = "8928323846:AAG6Va41KbFL82MxWHq2Jnqt8NInB3ysxRA"
@@ -30,7 +32,12 @@ ADMIN_IDS = [8610336203, 8928323846]
 OWNER_ID = 8610336203
 SUPPORT_IDS = [8610336203]
 
-API_URL = "https://yartyccfurry.onrender.com"
+# API URL'leri (Birden fazla API desteği)
+API_URLS = [
+    "https://yartyccfurry.onrender.com",
+    "https://yartyccfurry.onrender.com",  # Yedek
+]
+
 CHANNEL_USERNAME = "@yartyccfurry"
 DAILY_LIMIT = 5
 PREMIUM_LIMIT = 100
@@ -228,119 +235,160 @@ class Database:
         self.cursor.execute('UPDATE notifications SET is_active = 0 WHERE id = ?', (notif_id,))
         self.conn.commit()
 
-# ============= PROXY YÖNETİCİ =============
-class ProxyManager:
-    def __init__(self):
-        self.db = Database()
-        self.proxies = []
-        self.current_index = 0
-        self.load_proxies()
-    
-    def load_proxies(self):
-        self.db.cursor.execute('SELECT id, proxy, type FROM proxies WHERE is_active = 1')
-        self.proxies = self.db.cursor.fetchall()
-        logger.info(f"{len(self.proxies)} proxy yüklendi")
-    
-    def get_proxy(self):
-        if not self.proxies:
-            return None
-        
-        proxy = self.proxies[self.current_index % len(self.proxies)]
-        self.current_index += 1
-        
-        self.db.cursor.execute('''
-            UPDATE proxies SET last_used = ? WHERE id = ?
-        ''', (datetime.now().isoformat(), proxy[0]))
-        self.db.conn.commit()
-        
-        return {"http": proxy[1], "https": proxy[1]}
-    
-    def add_proxy(self, proxy, proxy_type="http"):
-        self.db.cursor.execute('''
-            INSERT INTO proxies (proxy, type) VALUES (?, ?)
-        ''', (proxy, proxy_type))
-        self.db.conn.commit()
-        self.load_proxies()
-        return True
-    
-    def remove_proxy(self, proxy_id):
-        self.db.cursor.execute('UPDATE proxies SET is_active = 0 WHERE id = ?', (proxy_id,))
-        self.db.conn.commit()
-        self.load_proxies()
-        return True
-    
-    def mark_fail(self, proxy_id):
-        self.db.cursor.execute('''
-            UPDATE proxies SET fail_count = fail_count + 1 
-            WHERE id = ?
-        ''', (proxy_id,))
-        self.db.conn.commit()
-        
-        self.db.cursor.execute('''
-            UPDATE proxies SET is_active = 0 
-            WHERE id = ? AND fail_count >= 3
-        ''', (proxy_id,))
-        self.db.conn.commit()
-        self.load_proxies()
-
-# ============= API İSTEK =============
-class APIClient:
+# ============= SÜPER GÜÇLÜ API İSTEK =============
+class SuperAPIClient:
     def __init__(self):
         self.session = requests.Session()
-        self.proxy_manager = ProxyManager()
         self.setup_session()
+        self.api_index = 0
+        self.proxies = self.load_proxies()
+        self.proxy_index = 0
+    
+    def load_proxies(self):
+        proxies = []
+        # Free proxy list
+        proxy_list = [
+            "http://189.240.60.164:9090",
+            "http://190.189.114.74:999",
+            "http://177.234.159.14:999",
+            "http://200.7.86.202:999",
+            "http://201.221.162.81:999",
+            "http://187.216.52.76:999",
+            "http://189.203.194.154:999",
+            "http://170.239.218.40:999",
+            "http://186.2.244.100:999",
+            "http://181.143.224.130:999",
+        ]
+        for p in proxy_list:
+            proxies.append({"http": p, "https": p})
+        return proxies
     
     def setup_session(self):
+        # Retry mekanizması
         retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"]
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504, 403, 401],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST", "PUT", "DELETE"]
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=100,
+            pool_maxsize=100
+        )
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+        
+        # Headers
+        self.session.headers.update({
+            "User-Agent": random.choice([
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
+            ]),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "DNT": "1",
+            "Pragma": "no-cache",
+            "Sec-Ch-Ua": '"Google Chrome";v="149", "Chromium";v="149", "Not_A Brand";v="24"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin"
+        })
+    
+    def get_proxy(self):
+        if self.proxies:
+            proxy = self.proxies[self.proxy_index % len(self.proxies)]
+            self.proxy_index += 1
+            return proxy
+        return None
     
     def make_request(self, endpoint, data=None, method="GET"):
-        url = f"{API_URL}{endpoint}"
-        max_attempts = 3
+        max_attempts = 5
+        api_urls = API_URLS.copy()
         
-        for attempt in range(max_attempts):
-            try:
-                proxy = self.proxy_manager.get_proxy()
-                
-                if method == "GET":
-                    response = self.session.get(url, proxies=proxy, timeout=30)
-                else:
-                    response = self.session.post(url, json=data, proxies=proxy, timeout=30)
-                
-                if response.status_code == 200:
-                    return response.json()
-                elif response.status_code == 429:
-                    time.sleep(5)
-                    continue
-                else:
-                    if proxy:
-                        self.proxy_manager.mark_fail(proxy.get('id', 0))
-                    continue
+        for api_attempt in range(len(api_urls)):
+            url = f"{api_urls[api_attempt]}{endpoint}"
+            
+            for attempt in range(max_attempts):
+                try:
+                    proxy = self.get_proxy()
                     
-            except Exception as e:
-                logger.error(f"İstek hatası: {e}")
-                time.sleep(2)
-                continue
+                    if method == "GET":
+                        response = self.session.get(url, proxies=proxy, timeout=30)
+                    else:
+                        response = self.session.post(url, json=data, proxies=proxy, timeout=30)
+                    
+                    if response.status_code == 200:
+                        return response.json()
+                    elif response.status_code == 429:
+                        time.sleep(5)
+                        continue
+                    elif response.status_code in [403, 401]:
+                        # Proxy banlanmış, yeni proxy dene
+                        self.proxy_index += 1
+                        continue
+                    else:
+                        time.sleep(2)
+                        continue
+                        
+                except requests.exceptions.Timeout:
+                    logger.warning(f"Timeout: {url}")
+                    time.sleep(2)
+                    continue
+                except requests.exceptions.ConnectionError:
+                    logger.warning(f"Connection error: {url}")
+                    time.sleep(3)
+                    continue
+                except Exception as e:
+                    logger.error(f"İstek hatası: {e}")
+                    time.sleep(2)
+                    continue
+            
+            # Bu API başarısız, diğerine geç
+            logger.warning(f"API {api_urls[api_attempt]} başarısız, diğerine geçiliyor...")
+            time.sleep(2)
         
+        # Tüm API'ler başarısız
         return None
+    
+    def test_api(self):
+        """API'nin çalışıp çalışmadığını test et"""
+        for url in API_URLS:
+            try:
+                response = self.session.get(f"{url}/api/stats", timeout=10)
+                if response.status_code == 200:
+                    return True
+            except:
+                continue
+        return False
 
 # ============= ANA BOT =============
 class SuperCardBot:
     def __init__(self):
         self.db = Database()
-        self.api = APIClient()
+        self.api = SuperAPIClient()
         self.app = None
-        self.proxy_manager = ProxyManager()
+        self.running = True
         
-        self.ADMIN_MESSAGE, self.REPLY_MESSAGE, self.ADD_PROXY, self.REMOVE_PROXY = range(4)
-        self.ADD_CARD, self.CHECK_CARD, self.MULTI_CHECK = range(10, 13)
+        # Bot zaten çalışıyorsa eski instance'ı durdur
+        self.stop_old_instance()
+    
+    def stop_old_instance(self):
+        """Eğer bot zaten çalışıyorsa durdur"""
+        try:
+            # Webhook'u temizle
+            temp_app = Application.builder().token(BOT_TOKEN).build()
+            import asyncio
+            asyncio.run(temp_app.bot.delete_webhook())
+        except:
+            pass
     
     async def is_admin(self, user_id):
         user = self.db.get_user(user_id)
@@ -382,6 +430,9 @@ class SuperCardBot:
         user_data = self.db.get_user(user_id)
         is_premium = user_data[5] == 1 if user_data else False
         
+        # API test et
+        api_status = "✅ Calisiyor" if self.api.test_api() else "❌ Calismiyor"
+        
         welcome_text = f"""
 🚀 SUPER CC CHECKER BOT
 
@@ -391,6 +442,7 @@ Merhaba {user.first_name}!
 • Kalan Hak: {remaining}
 • Premium: {'✅ Evet' if is_premium else '❌ Hayir'}
 • Toplam Kontrol: {user_data[10] if user_data else 0}
+• API Durumu: {api_status}
 
 📌 Komutlar:
 /generate - Rastgele kart uret
@@ -402,7 +454,8 @@ Merhaba {user.first_name}!
 /refer - Referans sistemi
 
 ⚡ Ozellikler:
-✅ Proxy destegi
+✅ Proxy destegi (10+ proxy)
+✅ Otomatik API yedekleme
 ✅ Gunluk 5 ucretsiz hak
 ✅ Premium paketler
 ✅ Referans sistemi
@@ -461,7 +514,7 @@ Merhaba {user.first_name}!
             if context.args and context.args[0].isdigit():
                 count = min(int(context.args[0]), remaining, 20)
             
-            status_msg = await update.message.reply_text("⏳ Kart uretiliyor...")
+            status_msg = await update.message.reply_text("⏳ Kart uretiliyor... (Proxy kullaniliyor)")
             
             data = self.api.make_request(f"/api/generate?count={count}")
             
@@ -487,7 +540,10 @@ Merhaba {user.first_name}!
                     caption="📄 Uretilen kartlar"
                 )
             else:
-                await status_msg.edit_text("❌ Kart uretilirken hata olustu!")
+                await status_msg.edit_text("❌ Kart uretilirken hata olustu! API'ye baglanilamiyor.")
+                # API test et
+                if not self.api.test_api():
+                    await update.message.reply_text("⚠️ API calismiyor! Lütfen daha sonra tekrar dene.")
                 
         except Exception as e:
             await update.message.reply_text(f"❌ Hata: {str(e)}")
@@ -537,7 +593,7 @@ Merhaba {user.first_name}!
                 "cvv": parts[3].strip()
             }
             
-            status_msg = await update.message.reply_text("⏳ Kart kontrol ediliyor...")
+            status_msg = await update.message.reply_text("⏳ Kart kontrol ediliyor... (Proxy kullaniliyor)")
             
             data = self.api.make_request("/api/check-single", card, "POST")
             
@@ -578,7 +634,9 @@ Merhaba {user.first_name}!
                 
                 await status_msg.edit_text(response_text)
             else:
-                await status_msg.edit_text("❌ Hata olustu! Lutfen tekrar dene.")
+                await status_msg.edit_text("❌ Hata olustu! API'ye baglanilamiyor.")
+                if not self.api.test_api():
+                    await update.message.reply_text("⚠️ API calismiyor! Lütfen daha sonra tekrar dene.")
                 
         except Exception as e:
             await update.message.reply_text(f"❌ Hata: {str(e)}")
@@ -652,7 +710,7 @@ Merhaba {user.first_name}!
                 await update.message.reply_text("❌ Gecerli kart bulunamadi!")
                 return
             
-            status_msg = await update.message.reply_text(f"⏳ {len(cards)} kart kontrol ediliyor...")
+            status_msg = await update.message.reply_text(f"⏳ {len(cards)} kart kontrol ediliyor... (Proxy kullaniliyor)")
             
             data = self.api.make_request("/api/check", {"cards": cards}, "POST")
             
@@ -723,7 +781,9 @@ Merhaba {user.first_name}!
                 
                 context.user_data['multi_check'] = False
             else:
-                await status_msg.edit_text("❌ Hata olustu! Lutfen tekrar dene.")
+                await status_msg.edit_text("❌ Hata olustu! API'ye baglanilamiyor.")
+                if not self.api.test_api():
+                    await update.message.reply_text("⚠️ API calismiyor! Lütfen daha sonra tekrar dene.")
     
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -807,7 +867,8 @@ Merhaba {user.first_name}!
 • Gunluk 5 ucretsiz hak
 • Premium ile sinirsiz
 • Referans sistemi
-• Proxy destegi
+• Proxy destegi (10+ proxy)
+• Otomatik API yedekleme
 • Detayli istatistikler
 • Canli kart bildirimi
 
@@ -849,6 +910,9 @@ Merhaba {user.first_name}!
         self.db.cursor.execute('SELECT COUNT(*), SUM(CASE WHEN status="approved" THEN 1 ELSE 0 END) FROM card_results')
         total_checks, live_checks = self.db.cursor.fetchone()
         
+        # API durumu
+        api_status = "✅ Calisiyor" if self.api.test_api() else "❌ Calismiyor"
+        
         message = f"""
 👑 ADMIN PANELI
 
@@ -859,6 +923,9 @@ Merhaba {user.first_name}!
 • Toplam Kontrol: {total_checks or 0}
 • Canli Kart: {live_checks or 0}
 
+🔄 API Durumu: {api_status}
+🔗 Proxy Sayisi: {len(self.api.proxies)}
+
 📌 Admin Komutlari:
 /broadcast - Duyuru gonder
 /add_premium - Premium ver
@@ -868,9 +935,6 @@ Merhaba {user.first_name}!
 /add_proxy - Proxy ekle
 /remove_proxy - Proxy sil
 /stats_all - Tum istatistikler
-
-🔄 Proxy Durumu:
-• Toplam Proxy: {len(self.proxy_manager.proxies)}
         """
         
         keyboard = [
@@ -1058,9 +1122,9 @@ Merhaba {user.first_name}!
             return
         
         proxy = context.args[0]
-        self.proxy_manager.add_proxy(proxy)
+        self.api.proxies.append({"http": proxy, "https": proxy})
         
-        await update.message.reply_text(f"✅ Proxy eklendi: {proxy}")
+        await update.message.reply_text(f"✅ Proxy eklendi: {proxy}\nToplam Proxy: {len(self.api.proxies)}")
     
     async def remove_proxy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1069,13 +1133,16 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Proxy ID girin!\nFormat: /remove_proxy 1")
+            await update.message.reply_text("❌ Proxy index girin!\nFormat: /remove_proxy 1")
             return
         
         try:
             proxy_id = int(context.args[0])
-            self.proxy_manager.remove_proxy(proxy_id)
-            await update.message.reply_text(f"✅ Proxy silindi: {proxy_id}")
+            if 0 <= proxy_id < len(self.api.proxies):
+                removed = self.api.proxies.pop(proxy_id)
+                await update.message.reply_text(f"✅ Proxy silindi: {removed}\nToplam Proxy: {len(self.api.proxies)}")
+            else:
+                await update.message.reply_text("❌ Gecersiz index!")
         except:
             await update.message.reply_text("❌ Hatali format!")
     
@@ -1260,7 +1327,7 @@ Her referans icin 1 ekstra hak kazan!
             await query.edit_message_text(
                 "🔄 Proxy Yonetimi\n\n"
                 "Format: /add_proxy http://user:pass@ip:port\n"
-                "Format: /remove_proxy 1 (id ile sil)"
+                "Format: /remove_proxy 1 (index ile sil)"
             )
         
         elif data == "admin_stats":
@@ -1283,6 +1350,14 @@ Her referans icin 1 ekstra hak kazan!
             await update.message.reply_text("❌ Aktif islem bulunamadi!")
     
     def run(self):
+        # Önce webhook'u temizle
+        try:
+            import asyncio
+            temp_app = Application.builder().token(BOT_TOKEN).build()
+            asyncio.run(temp_app.bot.delete_webhook())
+        except:
+            pass
+        
         self.app = Application.builder().token(BOT_TOKEN).build()
         
         self.app.add_handler(CommandHandler("start", self.start))
@@ -1310,10 +1385,16 @@ Her referans icin 1 ekstra hak kazan!
         print(f"👑 Adminler: {ADMIN_IDS}")
         print(f"📌 Kanal: {CHANNEL_USERNAME}")
         print(f"📊 Gunluk Limit: {DAILY_LIMIT}")
-        print(f"🔄 Proxy sayisi: {len(self.proxy_manager.proxies)}")
+        print(f"🔄 Proxy sayisi: {len(self.api.proxies)}")
+        print(f"📡 API Durumu: {'✅ Calisiyor' if self.api.test_api() else '❌ Calismiyor'}")
         print("✅ Bot calisiyor!")
         
-        self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Polling ile başlat - conflict hatasını önlemek için drop_pending_updates=True
+        self.app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            poll_interval=1.0
+        )
 
 if __name__ == "__main__":
     bot = SuperCardBot()
