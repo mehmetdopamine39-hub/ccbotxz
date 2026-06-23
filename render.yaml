@@ -1,0 +1,11 @@
+# render.yaml
+services:
+  - type: web
+    name: cc-super-bot
+    env: python
+    buildCommand: |
+      pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        value: 8928323846:AAG6Va41KbFL82MxWHq2Jnqt8NInB3ysxRA
