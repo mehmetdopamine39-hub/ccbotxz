@@ -32,8 +32,8 @@ ADMIN_IDS = [8610336203, 8928323846]
 OWNER_ID = 8610336203
 SUPPORT_IDS = [8610336203]
 
-# 🔥 KANAL AYARI - BURAYI DEĞİŞTİR!
-CHANNEL_USERNAME = "@yartccfury"  # <--- Senin kanalın
+# 🔥 KANAL AYARI - BURASI SENİN KANALIN!
+CHANNEL_USERNAME = "@yartyccfurry"  # <--- Buraya kendi kanalını yaz
 
 API_URL = "https://yartyccfurry.onrender.com"
 DAILY_LIMIT = 5
