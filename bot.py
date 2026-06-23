@@ -20,23 +20,21 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler
 )
-from telegram.constants import ParseMode
 import urllib3
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 # ============= KONFIGÜRASYON =============
 BOT_TOKEN = "8928323846:AAG6Va41KbFL82MxWHq2Jnqt8NInB3ysxRA"
-ADMIN_IDS = [8610336203, 8928323846]  # Admin ID'leri
-OWNER_ID = 8610336203  # Ana sahip
-SUPPORT_IDS = [8610336203]  # Destek ekibi
+ADMIN_IDS = [8610336203, 8928323846]
+OWNER_ID = 8610336203
+SUPPORT_IDS = [8610336203]
 
 API_URL = "https://yartyccfurry.onrender.com"
-CHANNEL_USERNAME = "@yartyccfurry"  # Zorunlu kanal
-DAILY_LIMIT = 5  # Günlük hak
-PREMIUM_LIMIT = 100  # Premium günlük hak
+CHANNEL_USERNAME = "@yartyccfurry"
+DAILY_LIMIT = 5
+PREMIUM_LIMIT = 100
 
-# Veritabanı
 DB_NAME = "bot_data.db"
 
 # Logging
@@ -58,7 +56,6 @@ class Database:
         self.create_tables()
     
     def create_tables(self):
-        # Kullanıcılar tablosu
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -79,7 +76,6 @@ class Database:
             )
         ''')
         
-        # Günlük kullanım tablosu
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS daily_usage (
                 user_id INTEGER,
@@ -89,7 +85,6 @@ class Database:
             )
         ''')
         
-        # Kart sonuçları tablosu
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS card_results (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +100,6 @@ class Database:
             )
         ''')
         
-        # Bildirimler tablosu
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +109,6 @@ class Database:
             )
         ''')
         
-        # Proxy tablosu
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS proxies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,15 +162,13 @@ class Database:
         if not user:
             return 0
         
-        # Admin ve premium kontrol
-        if user[7] == 1:  # is_admin
+        if user[7] == 1:
             return 999999
-        if user[5] == 1:  # is_premium
+        if user[5] == 1:
             expiry = user[6]
             if expiry and datetime.now().isoformat() < expiry:
                 return PREMIUM_LIMIT - self.get_daily_checks(user_id)
         
-        # Normal kullanıcı
         return DAILY_LIMIT - self.get_daily_checks(user_id)
     
     def add_card_result(self, user_id, card, status, gateway, message):
@@ -198,7 +189,6 @@ class Database:
         ))
         self.conn.commit()
         
-        # Toplam kontrol sayısını güncelle
         self.cursor.execute('''
             UPDATE users SET total_checks = total_checks + 1 
             WHERE user_id = ?
@@ -255,11 +245,9 @@ class ProxyManager:
         if not self.proxies:
             return None
         
-        # Döngüsel proxy seçimi
         proxy = self.proxies[self.current_index % len(self.proxies)]
         self.current_index += 1
         
-        # Proxy'yi kullanıldı olarak işaretle
         self.db.cursor.execute('''
             UPDATE proxies SET last_used = ? WHERE id = ?
         ''', (datetime.now().isoformat(), proxy[0]))
@@ -288,7 +276,6 @@ class ProxyManager:
         ''', (proxy_id,))
         self.db.conn.commit()
         
-        # 3 başarısız denemeden sonra proxy'yi pasif yap
         self.db.cursor.execute('''
             UPDATE proxies SET is_active = 0 
             WHERE id = ? AND fail_count >= 3
@@ -334,7 +321,6 @@ class APIClient:
                     continue
                 else:
                     if proxy:
-                        # Proxy'yi pasif yap
                         self.proxy_manager.mark_fail(proxy.get('id', 0))
                     continue
                     
@@ -353,11 +339,9 @@ class SuperCardBot:
         self.app = None
         self.proxy_manager = ProxyManager()
         
-        # Conversation states
         self.ADMIN_MESSAGE, self.REPLY_MESSAGE, self.ADD_PROXY, self.REMOVE_PROXY = range(4)
         self.ADD_CARD, self.CHECK_CARD, self.MULTI_CHECK = range(10, 13)
     
-    # ============= KONTROL FONKSİYONLARI =============
     async def is_admin(self, user_id):
         user = self.db.get_user(user_id)
         return user and (user[7] == 1 or user_id in ADMIN_IDS)
@@ -373,113 +357,102 @@ class SuperCardBot:
         except:
             return False
     
-    # ============= KOMUTLAR =============
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_id = user.id
         
-        # Kullanıcıyı veritabanına ekle
         self.db.add_user(user_id, user.username, user.first_name, user.last_name)
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!** Bu botu kullanamazsın.", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN! Bu botu kullanamazsin.")
             return
         
-        # Kanal kontrolü
         if not await self.check_channel_member(user_id):
-            keyboard = [[InlineKeyboardButton("📢 Kanala Katıl", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]]
+            keyboard = [[InlineKeyboardButton("📢 Kanala Katil", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                f"⚠️ **Önce kanala katılmalısın!**\n\n"
+                f"⚠️ Once kanala katilmalisin!\n\n"
                 f"🔗 Kanal: {CHANNEL_USERNAME}\n\n"
-                f"Katıldıktan sonra /start yaz.",
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                f"Katildiktan sonra /start yaz.",
+                reply_markup=reply_markup
             )
             return
         
-        # Hoş geldin mesajı
         remaining = self.db.get_remaining_checks(user_id)
         user_data = self.db.get_user(user_id)
         is_premium = user_data[5] == 1 if user_data else False
         
         welcome_text = f"""
-🚀 **SUPER CC CHECKER BOT**
+🚀 SUPER CC CHECKER BOT
 
 Merhaba {user.first_name}! 
 
-**📊 İstatistikler:**
+📊 Istatistikler:
 • Kalan Hak: {remaining}
-• Premium: {'✅ Evet' if is_premium else '❌ Hayır'}
+• Premium: {'✅ Evet' if is_premium else '❌ Hayir'}
 • Toplam Kontrol: {user_data[10] if user_data else 0}
 
-**📌 Komutlar:**
-/generate - Rastgele kart üret
+📌 Komutlar:
+/generate - Rastgele kart uret
 /check - Tek kart kontrol
-/check_multiple - Çoklu kart kontrol
-/stats - İstatistikler
-/help - Yardım
+/check_multiple - Coklu kart kontrol
+/stats - Istatistikler
+/help - Yardim
 /premium - Premium bilgileri
 /refer - Referans sistemi
 
-**⚡ Özellikler:**
-✅ Proxy desteği
-✅ Günlük 5 ücretsiz hak
+⚡ Ozellikler:
+✅ Proxy destegi
+✅ Gunluk 5 ucretsiz hak
 ✅ Premium paketler
 ✅ Referans sistemi
-✅ Detaylı istatistikler
+✅ Detayli istatistikler
         """
         
         keyboard = [
             [
-                InlineKeyboardButton("🎲 Kart Üret", callback_data="generate"),
+                InlineKeyboardButton("🎲 Kart Uret", callback_data="generate"),
                 InlineKeyboardButton("✅ Tek Kart", callback_data="check_single")
             ],
             [
-                InlineKeyboardButton("📋 Çoklu Kart", callback_data="check_multiple"),
-                InlineKeyboardButton("📊 İstatistik", callback_data="stats")
+                InlineKeyboardButton("📋 Coklu Kart", callback_data="check_multiple"),
+                InlineKeyboardButton("📊 Istatistik", callback_data="stats")
             ],
             [
                 InlineKeyboardButton("⭐ Premium", callback_data="premium"),
                 InlineKeyboardButton("👥 Referans", callback_data="refer")
             ],
             [
-                InlineKeyboardButton("❓ Yardım", callback_data="help"),
-                InlineKeyboardButton("🔄 Güncelle", callback_data="refresh")
+                InlineKeyboardButton("❓ Yardim", callback_data="help"),
+                InlineKeyboardButton("🔄 Guncelle", callback_data="refresh")
             ]
         ]
         
-        # Admin butonları
         if await self.is_admin(user_id):
             keyboard.append([
                 InlineKeyboardButton("👑 Admin Panel", callback_data="admin_panel")
             ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
     
     async def generate_cards(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN!")
             return
         
-        # Kanal kontrolü
         if not await self.check_channel_member(user_id):
-            await update.message.reply_text(f"⚠️ Önce {CHANNEL_USERNAME} kanalına katıl!", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"⚠️ Once {CHANNEL_USERNAME} kanalina katil!")
             return
         
-        # Hak kontrolü
         remaining = self.db.get_remaining_checks(user_id)
         if remaining <= 0:
             await update.message.reply_text(
-                "❌ **Günlük hakkın bitti!**\n\n"
-                "Premium alarak sınırsız kullanabilirsin.\n"
-                "Yarın tekrar dene!",
-                parse_mode=ParseMode.MARKDOWN
+                "❌ Gunluk hakkin bitti!\n\n"
+                "Premium alarak sinirsiz kullanabilirsin.\n"
+                "Yarin tekrar dene!"
             )
             return
         
@@ -488,36 +461,33 @@ Merhaba {user.first_name}!
             if context.args and context.args[0].isdigit():
                 count = min(int(context.args[0]), remaining, 20)
             
-            status_msg = await update.message.reply_text("⏳ Kart üretiliyor...")
+            status_msg = await update.message.reply_text("⏳ Kart uretiliyor...")
             
             data = self.api.make_request(f"/api/generate?count={count}")
             
             if data and data.get('status') == 'success':
                 cards = data.get('cards', [])
                 
-                # Hak düş
                 self.db.add_daily_check(user_id)
                 
-                message = f"🎲 **{len(cards)} Kart Üretildi:**\n\n"
+                message = f"🎲 {len(cards)} Kart Uretildi:\n\n"
                 for i, card in enumerate(cards, 1):
-                    message += f"{i}. `{card['number']}|{card['month']}|{card['year']}|{card['cvv']}`\n"
+                    message += f"{i}. {card['number']}|{card['month']}|{card['year']}|{card['cvv']}\n"
                 
-                # Kalan hak
                 remaining = self.db.get_remaining_checks(user_id)
                 message += f"\n📊 Kalan Hak: {remaining}"
                 
-                await status_msg.edit_text(message, parse_mode=ParseMode.MARKDOWN)
+                await status_msg.edit_text(message)
                 
-                # JSON dosyası
                 with open(f'cards_{user_id}.json', 'w') as f:
                     json.dump(cards, f, indent=2)
                 await update.message.reply_document(
                     document=open(f'cards_{user_id}.json', 'rb'),
                     filename=f'cards_{user_id}.json',
-                    caption="📄 Üretilen kartlar"
+                    caption="📄 Uretilen kartlar"
                 )
             else:
-                await status_msg.edit_text("❌ Kart üretilirken hata oluştu!")
+                await status_msg.edit_text("❌ Kart uretilirken hata olustu!")
                 
         except Exception as e:
             await update.message.reply_text(f"❌ Hata: {str(e)}")
@@ -525,24 +495,20 @@ Merhaba {user.first_name}!
     async def check_single_card(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN!")
             return
         
-        # Kanal kontrolü
         if not await self.check_channel_member(user_id):
-            await update.message.reply_text(f"⚠️ Önce {CHANNEL_USERNAME} kanalına katıl!", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"⚠️ Once {CHANNEL_USERNAME} kanalina katil!")
             return
         
-        # Hak kontrolü
         remaining = self.db.get_remaining_checks(user_id)
         if remaining <= 0:
             await update.message.reply_text(
-                "❌ **Günlük hakkın bitti!**\n\n"
-                "Premium alarak sınırsız kullanabilirsin.\n"
-                "Yarın tekrar dene!",
-                parse_mode=ParseMode.MARKDOWN
+                "❌ Gunluk hakkin bitti!\n\n"
+                "Premium alarak sinirsiz kullanabilirsin.\n"
+                "Yarin tekrar dene!"
             )
             return
         
@@ -551,18 +517,16 @@ Merhaba {user.first_name}!
                 card_data = context.args[0]
             else:
                 await update.message.reply_text(
-                    "❌ Lütfen kart bilgilerini girin!\n\n"
-                    "Format: `/check 4111111111111111|12|2026|123`",
-                    parse_mode=ParseMode.MARKDOWN
+                    "❌ Lutfen kart bilgilerini girin!\n\n"
+                    "Format: /check 4111111111111111|12|2026|123"
                 )
                 return
             
             parts = card_data.split('|')
             if len(parts) != 4:
                 await update.message.reply_text(
-                    "❌ Hatalı format!\n\n"
-                    "Doğru format: `4111111111111111|12|2026|123`",
-                    parse_mode=ParseMode.MARKDOWN
+                    "❌ Hatali format!\n\n"
+                    "Dogru format: 4111111111111111|12|2026|123"
                 )
                 return
             
@@ -583,41 +547,38 @@ Merhaba {user.first_name}!
                 gateway = result.get('gateway', 'Bilinmiyor')
                 message_text = result.get('message', '')
                 
-                # Sonucu kaydet
                 self.db.add_card_result(user_id, card, card_status, gateway, message_text)
-                
-                # Hak düş
                 self.db.add_daily_check(user_id)
                 
                 if card_status == 'approved':
                     emoji = "✅"
-                    status_text = "**CANLI** 🟢"
-                    await update.message.reply_text("🎉 **TEBRİKLER! KART CANLI!**", parse_mode=ParseMode.MARKDOWN)
+                    status_text = "CANLI 🟢"
+                    await update.message.reply_text("🎉 TEBRIKLER! KART CANLI!")
                 elif card_status == 'declined':
                     emoji = "❌"
-                    status_text = "**ÖLÜ** 🔴"
+                    status_text = "OLU 🔴"
                 else:
                     emoji = "⚠️"
-                    status_text = "**BİLİNMİYOR** ⚠️"
+                    status_text = "BILINMIYOR ⚠️"
                 
                 response_text = f"""
-{emoji} **Kart Kontrol Sonucu**
+{emoji} Kart Kontrol Sonucu
 
-📱 **Kart:** `{card['number']}`
-📅 **Tarih:** {card['month']}/{card['year']}
-🔐 **CVV:** {card['cvv']}
+📱 Kart: {card['number']}
+📅 Tarih: {card['month']}/{card['year']}
+🔐 CVV: {card['cvv']}
 
-📊 **Durum:** {status_text}
-🏦 **Gateway:** {gateway}
-💬 **Mesaj:** {message_text[:200]}
-⏱️ **Zaman:** {datetime.now().strftime('%H:%M:%S')}
+📊 Durum: {status_text}
+🏦 Gateway: {gateway}
+💬 Mesaj: {message_text[:200]}
+⏱️ Zaman: {datetime.now().strftime('%H:%M:%S')}
 
 📊 Kalan Hak: {self.db.get_remaining_checks(user_id)}
                 """
                 
-                await status_msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN)
+                await status_msg.edit_text(response_text)
             else:
-                await status_msg.edit_text("❌ Hata oluştu! Lütfen tekrar dene.")
+                await status_msg.edit_text("❌ Hata olustu! Lutfen tekrar dene.")
                 
         except Exception as e:
             await update.message.reply_text(f"❌ Hata: {str(e)}")
@@ -625,35 +586,30 @@ Merhaba {user.first_name}!
     async def check_multiple_cards(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN!")
             return
         
-        # Kanal kontrolü
         if not await self.check_channel_member(user_id):
-            await update.message.reply_text(f"⚠️ Önce {CHANNEL_USERNAME} kanalına katıl!", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"⚠️ Once {CHANNEL_USERNAME} kanalina katil!")
             return
         
-        # Hak kontrolü
         remaining = self.db.get_remaining_checks(user_id)
         if remaining <= 0:
             await update.message.reply_text(
-                "❌ **Günlük hakkın bitti!**\n\n"
-                "Premium alarak sınırsız kullanabilirsin.\n"
-                "Yarın tekrar dene!",
-                parse_mode=ParseMode.MARKDOWN
+                "❌ Gunluk hakkin bitti!\n\n"
+                "Premium alarak sinirsiz kullanabilirsin.\n"
+                "Yarin tekrar dene!"
             )
             return
         
         await update.message.reply_text(
-            "📋 **Lütfen kartları gönderin!**\n\n"
-            "Her kartı aşağıdaki formatta yazın:\n"
-            "`4111111111111111|12|2026|123`\n\n"
-            "Kartları alt alta yazın.\n"
-            "İşlemi iptal etmek için /cancel yazın.\n\n"
-            f"📊 Kalan Hak: {remaining}",
-            parse_mode=ParseMode.MARKDOWN
+            "📋 Lutfen kartlari gonderin!\n\n"
+            "Her karti asagidaki formatta yazin:\n"
+            "4111111111111111|12|2026|123\n\n"
+            "Kartlari alt alta yazin.\n"
+            "Islemi iptal etmek icin /cancel yazin.\n\n"
+            f"📊 Kalan Hak: {remaining}"
         )
         
         context.user_data['multi_check'] = True
@@ -662,16 +618,14 @@ Merhaba {user.first_name}!
         user_id = update.effective_user.id
         text = update.message.text
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN!")
             return
         
-        # Multi-check modu
         if context.user_data.get('multi_check'):
             if text.lower() == '/cancel':
                 context.user_data['multi_check'] = False
-                await update.message.reply_text("✅ İşlem iptal edildi!")
+                await update.message.reply_text("✅ Isle iptal edildi!")
                 return
             
             cards = []
@@ -695,7 +649,7 @@ Merhaba {user.first_name}!
                     })
             
             if not cards:
-                await update.message.reply_text("❌ Geçerli kart bulunamadı!")
+                await update.message.reply_text("❌ Gecerli kart bulunamadi!")
                 return
             
             status_msg = await update.message.reply_text(f"⏳ {len(cards)} kart kontrol ediliyor...")
@@ -706,7 +660,6 @@ Merhaba {user.first_name}!
                 results = data.get('results', [])
                 live_count = data.get('live_count', 0)
                 
-                # Sonuçları kaydet
                 for result in results:
                     card = result.get('card', {})
                     status = result.get('status', 'unknown')
@@ -714,16 +667,13 @@ Merhaba {user.first_name}!
                     message_text = result.get('message', '')
                     self.db.add_card_result(user_id, card, status, gateway, message_text)
                 
-                # Hak düş
                 for _ in range(len(cards)):
                     self.db.add_daily_check(user_id)
                 
-                # Sonuçları formatla
-                message = f"📊 **{len(results)} Kart Kontrol Sonucu:**\n"
-                message += f"✅ Canlı: {live_count}\n"
-                message += f"❌ Ölü: {len(results) - live_count}\n\n"
+                message = f"📊 {len(results)} Kart Kontrol Sonucu:\n"
+                message += f"✅ Canli: {live_count}\n"
+                message += f"❌ Olu: {len(results) - live_count}\n\n"
                 
-                # Live cards
                 live_cards = []
                 dead_cards = []
                 
@@ -738,29 +688,28 @@ Merhaba {user.first_name}!
                         dead_cards.append(f"❌ {card_str} - {result.get('message', '')[:50]}")
                 
                 if live_cards:
-                    message += "**🟢 CANLI KARTLAR:**\n"
+                    message += "🟢 CANLI KARTLAR:\n"
                     message += "\n".join(live_cards[:10])
                     if len(live_cards) > 10:
                         message += f"\n... ve {len(live_cards) - 10} daha"
                     message += "\n\n"
                 
                 if dead_cards:
-                    message += "**🔴 ÖLÜ KARTLAR:**\n"
+                    message += "🔴 OLU KARTLAR:\n"
                     message += "\n".join(dead_cards[:5])
                     if len(dead_cards) > 5:
                         message += f"\n... ve {len(dead_cards) - 5} daha"
                 
                 message += f"\n📊 Kalan Hak: {self.db.get_remaining_checks(user_id)}"
                 
-                await status_msg.edit_text(message, parse_mode=ParseMode.MARKDOWN)
+                await status_msg.edit_text(message)
                 
-                # Dosya olarak kaydet
                 with open(f'results_{user_id}.json', 'w') as f:
                     json.dump(results, f, indent=2)
                 await update.message.reply_document(
                     document=open(f'results_{user_id}.json', 'rb'),
                     filename=f'results_{user_id}.json',
-                    caption="📄 Detaylı sonuçlar"
+                    caption="📄 Detayli sonuclar"
                 )
                 
                 if live_cards:
@@ -769,19 +718,18 @@ Merhaba {user.first_name}!
                     await update.message.reply_document(
                         document=open(f'live_{user_id}.txt', 'rb'),
                         filename=f'live_{user_id}.txt',
-                        caption="✅ Canlı kartlar"
+                        caption="✅ Canli kartlar"
                     )
                 
                 context.user_data['multi_check'] = False
             else:
-                await status_msg.edit_text("❌ Hata oluştu! Lütfen tekrar dene.")
+                await status_msg.edit_text("❌ Hata olustu! Lutfen tekrar dene.")
     
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await update.message.reply_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("🚫 YASAKLANDIN!")
             return
         
         user = self.db.get_user(user_id)
@@ -789,92 +737,92 @@ Merhaba {user.first_name}!
         remaining = self.db.get_remaining_checks(user_id)
         
         if not user:
-            await update.message.reply_text("❌ Kullanıcı bulunamadı!")
+            await update.message.reply_text("❌ Kullanici bulunamadi!")
             return
         
         is_premium = user[5] == 1
         premium_expiry = user[6] if is_premium else "Yok"
         
         message = f"""
-📊 **İSTATİSTİKLERİN**
+📊 ISTATISTIKLERIN
 
-👤 **Kullanıcı:** @{user[1] or user[2] or 'Bilinmiyor'}
-🆔 **ID:** {user_id}
+👤 Kullanici: @{user[1] or user[2] or 'Bilinmiyor'}
+🆔 ID: {user_id}
 
-📊 **Kart İstatistikleri:**
+📊 Kart Istatistikleri:
 • Toplam Kontrol: {stats[0] if stats else 0}
-• Canlı Kart: {stats[1] if stats else 0}
-• Ölü Kart: {stats[2] if stats else 0}
-• Başarı Oranı: {f"{(stats[1]/stats[0]*100):.1f}%" if stats and stats[0] > 0 else "0%"}
+• Canli Kart: {stats[1] if stats else 0}
+• Olu Kart: {stats[2] if stats else 0}
+• Basari Orani: {f"{(stats[1]/stats[0]*100):.1f}%" if stats and stats[0] > 0 else "0%"}
 
-📅 **Günlük Durum:**
+📅 Gunluk Durum:
 • Kalan Hak: {remaining}
-• Günlük Limit: {'Sınırsız' if is_premium else DAILY_LIMIT}
+• Gunluk Limit: {'Sinirsiz' if is_premium else DAILY_LIMIT}
 
-⭐ **Premium Durumu:**
+⭐ Premium Durumu:
 • Premium: {'✅ Aktif' if is_premium else '❌ Pasif'}
-• Bitiş: {premium_expiry[:10] if premium_expiry != 'Yok' else 'Yok'}
+• Bitis: {premium_expiry[:10] if premium_expiry != 'Yok' else 'Yok'}
 
-👥 **Referans:**
-• Gönderdiğin Kişi: {user[12] if user[12] else 'Yok'}
-• Kazandığın Hak: {user[13] if user[13] else 0}
+👥 Referans:
+• Gonderen Kisi: {user[12] if user[12] else 'Yok'}
+• Kazanilan Hak: {user[13] if user[13] else 0}
 
-📅 **Katılım:** {user[3][:10] if user[3] else 'Bilinmiyor'}
+📅 Katilim: {user[3][:10] if user[3] else 'Bilinmiyor'}
         """
         
-        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(message)
     
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
         help_text = """
-📖 **KULLANIM KILAVUZU**
+📖 KULLANIM KILAVUZU
 
-**🔹 Temel Komutlar:**
-/generate - Rastgele kart üret
+🔹 Temel Komutlar:
+/generate - Rastgele kart uret
 /check - Tek kart kontrol et
-/check_multiple - Çoklu kart kontrol et
-/stats - İstatistiklerini gör
-/help - Bu yardım menüsü
+/check_multiple - Coklu kart kontrol et
+/stats - Istatistiklerini gor
+/help - Bu yardim menusu
 
-**🔹 Premium Komutlar:**
-/premium - Premium paketleri gör
+🔹 Premium Komutlar:
+/premium - Premium paketleri gor
 /refer - Referans sistemini kullan
 
-**🔹 Admin Komutları:**
+🔹 Admin Komutlari:
 /admin - Admin paneli
-/broadcast - Duyuru gönder
+/broadcast - Duyuru gonder
 /add_premium - Premium ver
 /remove_premium - Premium al
-/ban - Kullanıcı banla
-/unban - Ban kaldır
+/ban - Kullanici banla
+/unban - Ban kaldir
 /add_proxy - Proxy ekle
 /remove_proxy - Proxy sil
-/stats_all - Tüm istatistikler
+/stats_all - Tum istatistikler
 
-**📋 Kart Formatı:**
-`4111111111111111|12|2026|123`
+📋 Kart Formati:
+4111111111111111|12|2026|123
 
-**⚡ Özellikler:**
-• Günlük 5 ücretsiz hak
-• Premium ile sınırsız
+⚡ Ozellikler:
+• Gunluk 5 ucretsiz hak
+• Premium ile sinirsiz
 • Referans sistemi
-• Proxy desteği
-• Detaylı istatistikler
-• Canlı kart bildirimi
+• Proxy destegi
+• Detayli istatistikler
+• Canli kart bildirimi
 
-**❓ Sorun mu var?**
-/admin yazıp destek ekibine ulaşabilirsin.
+❓ Sorun mu var?
+/admin yazip destek ekibine ulasabilirsin.
         """
         
         keyboard = [
             [
-                InlineKeyboardButton("📊 İstatistikler", callback_data="stats"),
+                InlineKeyboardButton("📊 Istatistikler", callback_data="stats"),
                 InlineKeyboardButton("⭐ Premium", callback_data="premium")
             ],
             [
                 InlineKeyboardButton("👥 Referans", callback_data="refer"),
-                InlineKeyboardButton("🔄 Güncelle", callback_data="refresh")
+                InlineKeyboardButton("🔄 Guncelle", callback_data="refresh")
             ]
         ]
         
@@ -884,55 +832,51 @@ Merhaba {user.first_name}!
             ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(help_text, reply_markup=reply_markup)
     
-    # ============= ADMIN KOMUTLARI =============
     async def admin_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
         if not await self.is_admin(user_id):
-            await update.message.reply_text("❌ Bu komut sadece adminler içindir!")
+            await update.message.reply_text("❌ Bu komut sadece adminler icindir!")
             return
         
-        # İstatistikler
         users = self.db.get_all_users()
         total_users = len(users)
         premium_users = sum(1 for u in users if u[4] == 1)
         banned_users = sum(1 for u in users if u[5] == 1)
         
-        # Sonuç istatistikleri
         self.db.cursor.execute('SELECT COUNT(*), SUM(CASE WHEN status="approved" THEN 1 ELSE 0 END) FROM card_results')
         total_checks, live_checks = self.db.cursor.fetchone()
         
         message = f"""
-👑 **ADMIN PANELİ**
+👑 ADMIN PANELI
 
-📊 **Genel İstatistikler:**
-• Toplam Kullanıcı: {total_users}
-• Premium Kullanıcı: {premium_users}
-• Yasaklı Kullanıcı: {banned_users}
+📊 Genel Istatistikler:
+• Toplam Kullanici: {total_users}
+• Premium Kullanici: {premium_users}
+• Yasakli Kullanici: {banned_users}
 • Toplam Kontrol: {total_checks or 0}
-• Canlı Kart: {live_checks or 0}
+• Canli Kart: {live_checks or 0}
 
-📌 **Admin Komutları:**
-/broadcast - Duyuru gönder
+📌 Admin Komutlari:
+/broadcast - Duyuru gonder
 /add_premium - Premium ver
 /remove_premium - Premium al
-/ban - Kullanıcı banla
-/unban - Ban kaldır
+/ban - Kullanici banla
+/unban - Ban kaldir
 /add_proxy - Proxy ekle
 /remove_proxy - Proxy sil
-/stats_all - Tüm istatistikler
-/message - Admin mesaj gönder
+/stats_all - Tum istatistikler
 
-🔄 **Proxy Durumu:**
+🔄 Proxy Durumu:
 • Toplam Proxy: {len(self.proxy_manager.proxies)}
         """
         
         keyboard = [
             [
                 InlineKeyboardButton("📢 Duyuru", callback_data="admin_broadcast"),
-                InlineKeyboardButton("👥 Kullanıcılar", callback_data="admin_users")
+                InlineKeyboardButton("👥 Kullanicilar", callback_data="admin_users")
             ],
             [
                 InlineKeyboardButton("⭐ Premium", callback_data="admin_premium"),
@@ -948,7 +892,7 @@ Merhaba {user.first_name}!
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(message, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(message, reply_markup=reply_markup)
     
     async def broadcast(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -957,34 +901,31 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Mesaj gir!\nFormat: `/broadcast Merhaba herkese!`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Mesaj gir!\nFormat: /broadcast Merhaba herkese!")
             return
         
         message = ' '.join(context.args)
         
-        # Tüm kullanıcılara gönder
         users = self.db.get_all_users()
         sent = 0
         failed = 0
         
-        status_msg = await update.message.reply_text(f"⏳ {len(users)} kullanıcıya mesaj gönderiliyor...")
+        status_msg = await update.message.reply_text(f"⏳ {len(users)} kullaniciya mesaj gonderiliyor...")
         
         for user in users:
             try:
                 await self.app.bot.send_message(
                     user[0],
-                    f"📢 **DUYURU**\n\n{message}",
-                    parse_mode=ParseMode.MARKDOWN
+                    f"📢 DUYURU\n\n{message}"
                 )
                 sent += 1
-                await asyncio.sleep(0.1)  # Rate limit
+                await asyncio.sleep(0.1)
             except:
                 failed += 1
         
-        # Duyuruyu kaydet
         self.db.add_notification(message)
         
-        await status_msg.edit_text(f"✅ **Duyuru gönderildi!**\n\n📤 Gönderilen: {sent}\n❌ Başarısız: {failed}")
+        await status_msg.edit_text(f"✅ Duyuru gonderildi!\n\n📤 Gonderilen: {sent}\n❌ Basarisiz: {failed}")
     
     async def add_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -994,9 +935,8 @@ Merhaba {user.first_name}!
         
         if len(context.args) < 2:
             await update.message.reply_text(
-                "❌ Kullanıcı ID ve süre girin!\n"
-                "Format: `/add_premium 123456 30` (30 gün)",
-                parse_mode=ParseMode.MARKDOWN
+                "❌ Kullanici ID ve sure girin!\n"
+                "Format: /add_premium 123456 30 (30 gun)"
             )
             return
         
@@ -1007,23 +947,21 @@ Merhaba {user.first_name}!
             expiry = (datetime.now() + timedelta(days=days)).isoformat()
             self.db.update_user(target_id, is_premium=1, premium_expiry=expiry)
             
-            # Kullanıcıya bildir
             try:
                 await self.app.bot.send_message(
                     target_id,
-                    f"⭐ **PREMIUM VERİLDİ!**\n\n"
-                    f"📅 Süre: {days} gün\n"
-                    f"📆 Bitiş: {expiry[:10]}\n\n"
-                    f"Artık sınırsız kontrole sahipsin!",
-                    parse_mode=ParseMode.MARKDOWN
+                    f"⭐ PREMIUM VERILDI!\n\n"
+                    f"📅 Sure: {days} gun\n"
+                    f"📆 Bitis: {expiry[:10]}\n\n"
+                    f"Artik sinirsiz kontrole sahipsin!"
                 )
             except:
                 pass
             
-            await update.message.reply_text(f"✅ **Premium verildi!**\n\nKullanıcı: {target_id}\nSüre: {days} gün")
+            await update.message.reply_text(f"✅ Premium verildi!\n\nKullanici: {target_id}\nSure: {days} gun")
             
         except:
-            await update.message.reply_text("❌ Hatalı format!")
+            await update.message.reply_text("❌ Hatali format!")
     
     async def remove_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1032,27 +970,25 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Kullanıcı ID girin!\nFormat: `/remove_premium 123456`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Kullanici ID girin!\nFormat: /remove_premium 123456")
             return
         
         try:
             target_id = int(context.args[0])
             self.db.update_user(target_id, is_premium=0, premium_expiry=None)
             
-            # Kullanıcıya bildir
             try:
                 await self.app.bot.send_message(
                     target_id,
-                    "❌ **PREMIUM ALINDI!**\n\nPremium avantajların sona erdi.",
-                    parse_mode=ParseMode.MARKDOWN
+                    "❌ PREMIUM ALINDI!\n\nPremium avantajlarin sona erdi."
                 )
             except:
                 pass
             
-            await update.message.reply_text(f"✅ Premium alındı: {target_id}")
+            await update.message.reply_text(f"✅ Premium alindi: {target_id}")
             
         except:
-            await update.message.reply_text("❌ Hatalı format!")
+            await update.message.reply_text("❌ Hatali format!")
     
     async def ban_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1061,27 +997,25 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Kullanıcı ID girin!\nFormat: `/ban 123456`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Kullanici ID girin!\nFormat: /ban 123456")
             return
         
         try:
             target_id = int(context.args[0])
             self.db.update_user(target_id, is_banned=1)
             
-            # Kullanıcıya bildir
             try:
                 await self.app.bot.send_message(
                     target_id,
-                    "🚫 **YASAKLANDIN!**\n\nBu botu kullanman yasaklandı.",
-                    parse_mode=ParseMode.MARKDOWN
+                    "🚫 YASAKLANDIN!\n\nBu botu kullanman yasaklandi."
                 )
             except:
                 pass
             
-            await update.message.reply_text(f"✅ Kullanıcı yasaklandı: {target_id}")
+            await update.message.reply_text(f"✅ Kullanici yasaklandi: {target_id}")
             
         except:
-            await update.message.reply_text("❌ Hatalı format!")
+            await update.message.reply_text("❌ Hatali format!")
     
     async def unban_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1090,27 +1024,25 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Kullanıcı ID girin!\nFormat: `/unban 123456`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Kullanici ID girin!\nFormat: /unban 123456")
             return
         
         try:
             target_id = int(context.args[0])
             self.db.update_user(target_id, is_banned=0)
             
-            # Kullanıcıya bildir
             try:
                 await self.app.bot.send_message(
                     target_id,
-                    "✅ **YASAK KALDIRILDI!**\n\nArtık botu tekrar kullanabilirsin.",
-                    parse_mode=ParseMode.MARKDOWN
+                    "✅ YASAK KALDIRILDI!\n\nArtik botu tekrar kullanabilirsin."
                 )
             except:
                 pass
             
-            await update.message.reply_text(f"✅ Yasa kaldırıldı: {target_id}")
+            await update.message.reply_text(f"✅ Yasa kaldirildi: {target_id}")
             
         except:
-            await update.message.reply_text("❌ Hatalı format!")
+            await update.message.reply_text("❌ Hatali format!")
     
     async def add_proxy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1121,8 +1053,7 @@ Merhaba {user.first_name}!
         if not context.args:
             await update.message.reply_text(
                 "❌ Proxy girin!\n"
-                "Format: `/add_proxy http://user:pass@ip:port`",
-                parse_mode=ParseMode.MARKDOWN
+                "Format: /add_proxy http://user:pass@ip:port"
             )
             return
         
@@ -1138,7 +1069,7 @@ Merhaba {user.first_name}!
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Proxy ID girin!\nFormat: `/remove_proxy 1`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Proxy ID girin!\nFormat: /remove_proxy 1")
             return
         
         try:
@@ -1146,7 +1077,7 @@ Merhaba {user.first_name}!
             self.proxy_manager.remove_proxy(proxy_id)
             await update.message.reply_text(f"✅ Proxy silindi: {proxy_id}")
         except:
-            await update.message.reply_text("❌ Hatalı format!")
+            await update.message.reply_text("❌ Hatali format!")
     
     async def stats_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -1154,7 +1085,6 @@ Merhaba {user.first_name}!
         if not await self.is_admin(user_id):
             return
         
-        # Tüm istatistikler
         self.db.cursor.execute('''
             SELECT 
                 COUNT(DISTINCT user_id) as total_users,
@@ -1166,7 +1096,6 @@ Merhaba {user.first_name}!
         ''')
         stats = self.db.cursor.fetchone()
         
-        # Son 7 gün
         self.db.cursor.execute('''
             SELECT date, SUM(checks) 
             FROM daily_usage 
@@ -1177,27 +1106,26 @@ Merhaba {user.first_name}!
         daily = self.db.cursor.fetchall()
         
         message = f"""
-📊 **TÜM İSTATİSTİKLER**
+📊 TUM ISTATISTIKLER
 
-👥 **Kullanıcılar:**
+👥 Kullanicilar:
 • Toplam: {stats[0] or 0}
 • Premium: {stats[1] or 0}
-• Yasaklı: {stats[2] or 0}
+• Yasakli: {stats[2] or 0}
 
-💳 **Kartlar:**
+💳 Kartlar:
 • Toplam Kontrol: {stats[3] or 0}
-• Canlı Kart: {stats[4] or 0}
-• Başarı Oranı: {f"{(stats[4]/stats[3]*100):.1f}%" if stats[3] and stats[3] > 0 else "0%"}
+• Canli Kart: {stats[4] or 0}
+• Basari Orani: {f"{(stats[4]/stats[3]*100):.1f}%" if stats[3] and stats[3] > 0 else "0%"}
 
-📅 **Son 7 Gün:**
+📅 Son 7 Gun:
         """
         
         for date, checks in daily:
             message += f"• {date}: {checks} kontrol\n"
         
-        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(message)
     
-    # ============= CALLBACK HANDLER =============
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         user_id = query.from_user.id
@@ -1205,9 +1133,8 @@ Merhaba {user.first_name}!
         
         data = query.data
         
-        # Ban kontrolü
         if await self.is_banned(user_id):
-            await query.edit_message_text("🚫 **YASAKLANDIN!**", parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text("🚫 YASAKLANDIN!")
             return
         
         if data == "generate":
@@ -1215,18 +1142,16 @@ Merhaba {user.first_name}!
         
         elif data == "check_single":
             await query.edit_message_text(
-                "✅ **Tek Kart Kontrol**\n\n"
-                "Format: `/check 4111111111111111|12|2026|123`",
-                parse_mode=ParseMode.MARKDOWN
+                "✅ Tek Kart Kontrol\n\n"
+                "Format: /check 4111111111111111|12|2026|123"
             )
         
         elif data == "check_multiple":
             await query.edit_message_text(
-                "📋 **Çoklu Kart Kontrol**\n\n"
-                "Kartları alt alta gönder:\n"
-                "`/check_multiple`\n"
-                "Ardından kartları yapıştır.",
-                parse_mode=ParseMode.MARKDOWN
+                "📋 Coklu Kart Kontrol\n\n"
+                "Kartlari alt alta gonder:\n"
+                "/check_multiple\n"
+                "Ardindan kartlari yapistir."
             )
         
         elif data == "stats":
@@ -1234,27 +1159,27 @@ Merhaba {user.first_name}!
         
         elif data == "premium":
             message = """
-⭐ **PREMIUM PAKETLER**
+⭐ PREMIUM PAKETLER
 
-🚀 **Premium ile sınırsız kontrol!**
+🚀 Premium ile sinirsiz kontrol!
 
-**📦 Paketler:**
-• 7 Gün - 5$ (veya 10 referans)
-• 30 Gün - 15$ (veya 25 referans)
-• 90 Gün - 35$ (veya 50 referans)
-• 365 Gün - 100$ (veya 100 referans)
+📦 Paketler:
+• 7 Gun - 5$ (veya 10 referans)
+• 30 Gun - 15$ (veya 25 referans)
+• 90 Gun - 35$ (veya 50 referans)
+• 365 Gun - 100$ (veya 100 referans)
 
-**✨ Premium Avantajları:**
-✅ Sınırsız kart kontrol
-✅ Öncelikli destek
-✅ Özel gateway'ler
-✅ Hızlı kontrol
-✅ Daha yüksek başarı oranı
+✨ Premium Avantajlari:
+✅ Sinirsiz kart kontrol
+✅ Oncelikli destek
+✅ Ozel gateway'ler
+✅ Hizli kontrol
+✅ Daha yuksek basari orani
 
-**📞 İletişim:**
-Premium almak için @wortexbabax yaz.
+📞 Iletisim:
+Premium almak icin @wortexbabax yaz.
             """
-            await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text(message)
         
         elif data == "refer":
             user = self.db.get_user(user_id)
@@ -1265,82 +1190,77 @@ Premium almak için @wortexbabax yaz.
             ref_count = user[13] if user[13] else 0
             
             message = f"""
-👥 **REFERANS SİSTEMİ**
+👥 REFERANS SISTEMI
 
-Her referans için **1 ekstra hak** kazan!
+Her referans icin 1 ekstra hak kazan!
 
-📌 **Referans Linkin:**
-`{ref_link}`
+📌 Referans Linkin:
+{ref_link}
 
-👤 **Toplam Referans:** {ref_count}
-⭐ **Kazandığın Hak:** {ref_count}
+👤 Toplam Referans: {ref_count}
+⭐ Kazanilan Hak: {ref_count}
 
-**📋 Nasıl Çalışır?**
-1. Linki arkadaşlarına gönder
-2. Arkadaşın botu başlatsın
+📋 Nasil Calisir?
+1. Linki arkadaslarina gonder
+2. Arkadasin botu baslatsin
 3. 1 hak kazan!
 
-**🎁 Bonus:**
-10 referans = 7 gün premium
-25 referans = 30 gün premium
+🎁 Bonus:
+10 referans = 7 gun premium
+25 referans = 30 gun premium
             """
             
-            keyboard = [[InlineKeyboardButton("📤 Paylaş", switch_inline_query=ref_link)]]
+            keyboard = [[InlineKeyboardButton("📤 Paylas", switch_inline_query=ref_link)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await query.edit_message_text(message, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text(message, reply_markup=reply_markup)
         
         elif data == "refresh":
-            await query.edit_message_text("🔄 Güncelleniyor...")
+            await query.edit_message_text("🔄 Guncelleniyor...")
             await self.start(update, context)
         
         elif data == "help":
             await self.help(update, context)
         
-        # Admin callback'leri
         elif data == "admin_panel":
             await self.admin_panel(update, context)
         
         elif data == "admin_broadcast":
             await query.edit_message_text(
-                "📢 **Duyuru Gönder**\n\n"
-                "Format: `/broadcast Mesajın`",
-                parse_mode=ParseMode.MARKDOWN
+                "📢 Duyuru Gonder\n\n"
+                "Format: /broadcast Mesajin"
             )
         
         elif data == "admin_users":
             users = self.db.get_all_users()
-            message = "👥 **Kullanıcılar:**\n\n"
+            message = "👥 Kullanicilar:\n\n"
             for user in users[:20]:
                 status = "⭐" if user[4] else "👤"
                 ban = "🚫" if user[5] else "✅"
                 message += f"{status} @{user[1] or user[2] or user[0]} - {ban}\n"
             if len(users) > 20:
                 message += f"\n... ve {len(users)-20} daha"
-            await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN)
+            await query.edit_message_text(message)
         
         elif data == "admin_premium":
             await query.edit_message_text(
-                "⭐ **Premium Yönetimi**\n\n"
-                "Format: `/add_premium 123456 30` (30 gün)\n"
-                "Format: `/remove_premium 123456` (al)",
-                parse_mode=ParseMode.MARKDOWN
+                "⭐ Premium Yonetimi\n\n"
+                "Format: /add_premium 123456 30 (30 gun)\n"
+                "Format: /remove_premium 123456 (al)"
             )
         
         elif data == "admin_ban":
             await query.edit_message_text(
-                "🚫 **Ban Yönetimi**\n\n"
-                "Format: `/ban 123456` (banla)\n"
-                "Format: `/unban 123456` (aç)",
-                parse_mode=ParseMode.MARKDOWN
+                "🚫 Ban Yonetimi\n\n"
+                "Format: /ban 123456 (banla)\n"
+                "Format: /unban 123456 (ac)"
             )
         
         elif data == "admin_proxy":
             await query.edit_message_text(
-                "🔄 **Proxy Yönetimi**\n\n"
-                "Format: `/add_proxy http://user:pass@ip:port`\n"
-                "Format: `/remove_proxy 1` (id ile sil)",
-                parse_mode=ParseMode.MARKDOWN
+                "🔄 Proxy Yonetimi\n\n"
+                "Format: /add_proxy http://user:pass@ip:port\n"
+                "Format: /remove_proxy 1 (id ile sil)"
             )
         
         elif data == "admin_stats":
@@ -1348,19 +1268,23 @@ Her referans için **1 ekstra hak** kazan!
         
         elif data == "admin_support":
             await query.edit_message_text(
-                "💬 **Destek Ekibi**\n\n"
-                "Destek için @wortexbabax yazabilirsin.\n\n"
-                "Admin mesaj göndermek için:\n"
-                "/message KULLANICI_ID MESAJ",
-                parse_mode=ParseMode.MARKDOWN
+                "💬 Destek Ekibi\n\n"
+                "Destek icin @wortexbabax yazabilirsin.\n\n"
+                "Admin mesaj gondermek icin:\n"
+                "/message KULLANICI_ID MESAJ"
             )
     
-    # ============= BOTU BAŞLAT =============
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if user_id in context.user_data:
+            context.user_data.clear()
+            await update.message.reply_text("✅ Islem iptal edildi!")
+        else:
+            await update.message.reply_text("❌ Aktif islem bulunamadi!")
+    
     def run(self):
-        # Application'ı oluştur
         self.app = Application.builder().token(BOT_TOKEN).build()
         
-        # Komutlar
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("help", self.help))
         self.app.add_handler(CommandHandler("generate", self.generate_cards))
@@ -1369,7 +1293,6 @@ Her referans için **1 ekstra hak** kazan!
         self.app.add_handler(CommandHandler("stats", self.stats))
         self.app.add_handler(CommandHandler("cancel", self.cancel))
         
-        # Admin komutları
         self.app.add_handler(CommandHandler("admin", self.admin_panel))
         self.app.add_handler(CommandHandler("broadcast", self.broadcast))
         self.app.add_handler(CommandHandler("add_premium", self.add_premium))
@@ -1380,29 +1303,17 @@ Her referans için **1 ekstra hak** kazan!
         self.app.add_handler(CommandHandler("remove_proxy", self.remove_proxy))
         self.app.add_handler(CommandHandler("stats_all", self.stats_all))
         
-        # Mesaj handler
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_messages))
-        
-        # Callback handler
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
         
-        print("🚀 Super CC Checker Bot başlatılıyor...")
+        print("🚀 Super CC Checker Bot baslatiliyor...")
         print(f"👑 Adminler: {ADMIN_IDS}")
         print(f"📌 Kanal: {CHANNEL_USERNAME}")
-        print(f"📊 Günlük Limit: {DAILY_LIMIT}")
-        print(f"🔄 Proxy sayısı: {len(self.proxy_manager.proxies)}")
-        print("✅ Bot çalışıyor!")
+        print(f"📊 Gunluk Limit: {DAILY_LIMIT}")
+        print(f"🔄 Proxy sayisi: {len(self.proxy_manager.proxies)}")
+        print("✅ Bot calisiyor!")
         
-        # Polling ile başlat
         self.app.run_polling(allowed_updates=Update.ALL_TYPES)
-    
-    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id in context.user_data:
-            context.user_data.clear()
-            await update.message.reply_text("✅ İşlem iptal edildi!")
-        else:
-            await update.message.reply_text("❌ Aktif işlem bulunamadı!")
 
 if __name__ == "__main__":
     bot = SuperCardBot()
