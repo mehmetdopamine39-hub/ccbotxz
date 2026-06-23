@@ -1357,6 +1357,7 @@ Her referans için **1 ekstra hak** kazan!
     
     # ============= BOTU BAŞLAT =============
     def run(self):
+        # Application'ı oluştur
         self.app = Application.builder().token(BOT_TOKEN).build()
         
         # Komutlar
@@ -1392,7 +1393,16 @@ Her referans için **1 ekstra hak** kazan!
         print(f"🔄 Proxy sayısı: {len(self.proxy_manager.proxies)}")
         print("✅ Bot çalışıyor!")
         
+        # Polling ile başlat
         self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if user_id in context.user_data:
+            context.user_data.clear()
+            await update.message.reply_text("✅ İşlem iptal edildi!")
+        else:
+            await update.message.reply_text("❌ Aktif işlem bulunamadı!")
 
 if __name__ == "__main__":
     bot = SuperCardBot()
